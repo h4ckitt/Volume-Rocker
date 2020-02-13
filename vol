@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash
 DEFAULT_SINK=$(pactl info | grep "Default Sink" | sed 's/.* //')
 DEFAULT_SOURCE=$(pactl info | grep "Default Source" | sed 's/.* //')
 
@@ -7,22 +7,27 @@ update(){
         yad --text "Max Volume Attained" --undecorated --timeout 2 --no-button --no-focus --on-top --center
         exit
         }
-        yad --progress --percentage "$1" --timeout 3 --undecorated --text="Test" --button="Up" --button="Down" ---no-focus --center --on-top
+        yad --progress --percentage "$1" --timeout 3 --undecorated --text="Volume" --button="Down" --button="$mute_button:3" --button="Up" --no-focus --center --on-top
         choice=$?
         if [ $choice -eq 0 ]; then
-        up
-        elif [ $choice -eq 1 ]; then
         down
+        elif [ $choice -eq 2 ]; then
+        up
+    	elif [ $choice -eq 3 ]; then
+        	mute
         fi
 }
 export -f update
+
 
 get_volume(){
 	echo $(pactl list | grep -E "Name: $DEFAULT_SINK$|Volume" | sed '2q;d' | sed 's/.*\,//' | sed 's/\%.*//' | sed 's/.*\///' | tr -d " ")
 }
 export -f get_volume
 declare -i VOL=$(get_volume)
-export -f $VOL
+#sexport $VOL
+mute_button="Mute"
+export $mute_button
 show_vol(){
 	update $(get_volume)
 }
@@ -42,12 +47,38 @@ down(){
 }
 export -f down
 
+get_mute_state(){
+	echo $(pactl list | grep -E "Name: $DEFAULT_SINK$|Mute" | sed '3q;d' | sed 's/.* //')
+}
+export -f get_mute_state
+
+mute(){
+	mute_state=$(get_mute_state)
+	if [ "$mute_state" == "no" ]; then 
+		VOL=0		
+		s=1
+		mute_button="Unmute"
+		export $mute_button
+#		export $VOL
+	elif [ "$mute_state" == "yes" ]; then
+	s=0
+	VOL=$(get_volume)
+	mute_button="Mute"
+	export $mute_button
+#	export $VOL
+fi
+	pactl set-sink-mute "$DEFAULT_SINK" "$s"
+	update $VOL
+}
+export -f mute
+
 init(){
 	! [ -z $(ps -ax | grep yad | grep volume) ] || {
 	export fifo=$(mktemp -u --tmpdir vol.XXXXXX)
 	mkfifo "$fifo"
 	trap "rm -f $fifo" exit
 	
+	show_vol
 	vol_up(){
 	up
 	}
@@ -70,7 +101,7 @@ init(){
 
 	menu_options(){
 	echo "icon:audio-volume-high"
-	echo "menu:Volume Up!bash -c vol_up!gtk-add||Volume Down!bash -c vol_down!gtk-remove||Mute!bash -c mewt!gtk-quit"
+	echo "menu:Volume Up!bash -c vol_up!gtk-add||Volume Down!bash -c vol_down!gtk-remove||$mute_button!bash -c mewt!gtk-quit"
 	echo "tooltip:Volume"
 	}
 	exec 3<>$fifo
@@ -80,4 +111,9 @@ init(){
 	}
 }
 
-init
+case "$1" in
+	"up") up ;;
+	"down") down;;
+	"mute") mute;;
+	*) show_vol;;
+esac
