@@ -1,29 +1,53 @@
-#!/bin/bash
+#!/bin/bash -x
 DEFAULT_SINK=$(pactl info | grep "Default Sink" | sed 's/.* //')
-DEFAULT_SOURCE=$(pactl info | grep "Default Sourec" | sed 's/.* //')
+DEFAULT_SOURCE=$(pactl info | grep "Default Source" | sed 's/.* //')
 
 update(){
 	! [ $1 -gt 100 ] || {
-        yad --text "Max Volume Attained" --undecorated --timeout 2 --no-button --no-fo>
+        yad --text "Max Volume Attained" --undecorated --timeout 2 --no-button --no-focus --on-top --center
         exit
         }
-        yad --progress --percentage "$1" --timeout 3 --undecorated --text="Test" --but>
-        if [ $? -eq 0 ]; then
+        yad --progress --percentage "$1" --timeout 3 --undecorated --text="Test" --button="Up" --button="Down" ---no-focus --center --on-top
+        choice=$?
+        if [ $choice -eq 0 ]; then
         up
-        elif [ $? -eq 1 ]; then
+        elif [ $choice -eq 1 ]; then
         down
         fi
 }
+export -f update
+
 get_volume(){
 	echo $(pactl list | grep -E "Name: $DEFAULT_SINK$|Volume" | sed '2q;d' | sed 's/.*\,//' | sed 's/\%.*//' | sed 's/.*\///' | tr -d " ")
 }
+export -f get_volume
+declare -i VOL=$(get_volume)
+export -f $VOL
+show_vol(){
+	update $(get_volume)
+}
+export -f show_vol
+
+up(){
+	VOL+=10
+	pactl set-sink-volume "$DEFAULT_SINK" "$VOL%"
+	update $VOL
+}
+export -f up
+
+down(){
+	VOL=$((VOL-10))
+	pactl set-sink-volume "$DEFAULT_SINK" "$VOL%"
+	update $VOL
+}
+export -f down
 
 init(){
-	[ -z $(ps -ax | grep yad | grep volume) ] || {
+	! [ -z $(ps -ax | grep yad | grep volume) ] || {
 	export fifo=$(mktemp -u --tmpdir vol.XXXXXX)
 	mkfifo "$fifo"
 	trap "rm -f $fifo" exit
-
+	
 	vol_up(){
 	up
 	}
@@ -45,11 +69,15 @@ init(){
 	export -f click_act
 
 	menu_options(){
-	echo "icon:scheduler"
+	echo "icon:audio-volume-high"
 	echo "menu:Volume Up!bash -c vol_up!gtk-add||Volume Down!bash -c vol_down!gtk-remove||Mute!bash -c mewt!gtk-quit"
 	echo "tooltip:Volume"
-
-up(){
-	VOL=$((get_volume+10))
-	pactl set-sink-volume "$DEFAULT_SINK" "$VOL"
+	}
+	exec 3<>$fifo
+	yad --notification --command="bash -c click_act" --listen <&3 2>/dev/null & menu_options >&3 2>/dev/null
+	exec 3>&-
 	
+	}
+}
+
+init
