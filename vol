@@ -1,0 +1,55 @@
+#!/bin/bash
+DEFAULT_SINK=$(pactl info | grep "Default Sink" | sed 's/.* //')
+DEFAULT_SOURCE=$(pactl info | grep "Default Sourec" | sed 's/.* //')
+
+update(){
+	! [ $1 -gt 100 ] || {
+        yad --text "Max Volume Attained" --undecorated --timeout 2 --no-button --no-fo>
+        exit
+        }
+        yad --progress --percentage "$1" --timeout 3 --undecorated --text="Test" --but>
+        if [ $? -eq 0 ]; then
+        up
+        elif [ $? -eq 1 ]; then
+        down
+        fi
+}
+get_volume(){
+	echo $(pactl list | grep -E "Name: $DEFAULT_SINK$|Volume" | sed '2q;d' | sed 's/.*\,//' | sed 's/\%.*//' | sed 's/.*\///' | tr -d " ")
+}
+
+init(){
+	[ -z $(ps -ax | grep yad | grep volume) ] || {
+	export fifo=$(mktemp -u --tmpdir vol.XXXXXX)
+	mkfifo "$fifo"
+	trap "rm -f $fifo" exit
+
+	vol_up(){
+	up
+	}
+	export -f vol_up
+
+	vol_down(){
+	down
+	}
+	export -f vol_down
+
+	mewt(){
+	mute
+	}
+	export -f mewt
+
+	click_act(){
+	show_vol
+	}
+	export -f click_act
+
+	menu_options(){
+	echo "icon:scheduler"
+	echo "menu:Volume Up!bash -c vol_up!gtk-add||Volume Down!bash -c vol_down!gtk-remove||Mute!bash -c mewt!gtk-quit"
+	echo "tooltip:Volume"
+
+up(){
+	VOL=$((get_volume+10))
+	pactl set-sink-volume "$DEFAULT_SINK" "$VOL"
+	
