@@ -5,6 +5,7 @@ DEFAULT_SOURCE=$(pactl info | grep "Default Source" | sed 's/.* //')
 update(){
 	! [ $1 -gt 100 ] || {
         yad --text "Max Volume Attained" --undecorated --timeout 2 --no-button --no-focus --on-top --center
+        pactl set-sink-volume "$DEFAULT_SINK" 100%
         exit
         }
         yad --progress --percentage "$1" --timeout 3 --undecorated --text="Volume" --button="Down" --button="$mute_button:3" --button="Up" --no-focus --center --on-top
